@@ -341,13 +341,6 @@ h1 {
   margin: 0;
 }
 
-.script-note {
-  text-align: center;
-  color: #8f7d91;
-  font-family: "Bradley Hand", "Segoe Print", cursive;
-  font-size: 1.18rem;
-}
-
 .view {
   display: none;
 }
@@ -370,7 +363,7 @@ h1 {
 }
 
 .task-card {
-  min-height: 232px;
+  min-height: 244px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -389,9 +382,11 @@ h1 {
 .task-main {
   position: relative;
   z-index: 2;
-  padding: 14px 14px 0;
+  min-height: 64px;
+  padding: 14px 14px 8px;
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -428,7 +423,7 @@ h1 {
 
 .photo-surface {
   min-height: 154px;
-  margin-top: -8px;
+  margin-top: 0;
   background-size: cover;
   background-position: center;
 }
