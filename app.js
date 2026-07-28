@@ -370,6 +370,7 @@ function renderTasks() {
   for (const task of tasks) {
     const card = document.createElement("article");
     card.className = "task-card";
+    card.classList.toggle("is-complete", task.status === "completed" || task.status === "late");
     card.dataset.id = task.id;
 
     const start = new Date(task.startAt);
@@ -396,6 +397,10 @@ function renderTasks() {
       <div class="card-footer">
         <span>${task.status === "open" ? "15 min left" : statusLabel(task)}</span>
         <i></i>
+        <label class="card-upload-button">
+          <input type="file" accept="image/*" capture="environment" data-upload="${task.id}" />
+          <strong>${task.completedAt ? "Replace proof" : "Upload proof"}</strong>
+        </label>
       </div>
     `;
 
@@ -427,11 +432,11 @@ function cardPhotoClass(title) {
 }
 
 function statusLabel(task) {
-  if (task.status === "completed") return "complete";
-  if (task.status === "late") return "late proof";
+  if (task.status === "completed") return `complete ${formatTime(new Date(task.completedAt))}`;
+  if (task.status === "late") return `late ${formatTime(new Date(task.completedAt))}`;
   if (task.status === "missed") return "missed";
   if (task.status === "skipped") return "skipped";
-  return "proof due";
+  return `due ${formatTime(new Date(task.dueAt))}`;
 }
 
 function windowText(task) {
@@ -498,7 +503,7 @@ async function uploadProof(taskId, file) {
     status: completedStatus,
   });
 
-  addHistory(task, completedStatus, `Photo uploaded at ${formatTime(now)}`);
+  addHistory(task, completedStatus, `Photo uploaded at ${formatTime(now)} for ${formatTime(new Date(task.startAt))}`);
   saveState();
   render();
 }
@@ -649,7 +654,11 @@ els.seedTodayButton.addEventListener("click", () => {
 els.syncCalendarButton.addEventListener("click", syncCalendar);
 els.connectCalendarButton.addEventListener("click", requestGoogleCalendarAccess);
 function promptForProofUpload() {
-  const task = tasksForSelectedDay().find((item) => !item.completedAt && !item.skippedAt) || tasksForSelectedDay()[0];
+  const dayTasks = tasksForSelectedDay().sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+  const task =
+    dayTasks.find((item) => item.status === "open" && !item.completedAt && !item.skippedAt) ||
+    dayTasks.find((item) => !item.completedAt && !item.skippedAt) ||
+    dayTasks[0];
   if (!task) return;
 
   const input = document.createElement("input");

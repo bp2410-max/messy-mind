@@ -391,16 +391,24 @@ h1 {
 }
 
 .task-main::after {
-  content: "✓";
+  content: "";
   flex: 0 0 auto;
   width: 30px;
   height: 30px;
   display: grid;
   place-items: center;
   border-radius: 999px;
+  border: 1.5px solid rgba(111, 95, 112, 0.72);
+  background: rgba(255, 250, 246, 0.72);
+  color: transparent;
+  font-weight: 800;
+}
+
+.task-card.is-complete .task-main::after {
+  content: "✓";
+  border-color: var(--rose);
   background: var(--rose);
   color: #fff;
-  font-weight: 800;
 }
 
 .task-main h3 {
@@ -478,6 +486,30 @@ h1 {
   height: 4px;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--rose) 72%, rgba(201, 120, 112, 0.18) 72%);
+}
+
+.card-upload-button {
+  position: relative;
+  display: grid;
+  min-height: 34px;
+  margin-top: 2px;
+  border: 1px dashed rgba(201, 120, 112, 0.58);
+  border-radius: 12px;
+  color: var(--rose);
+  place-items: center;
+  background: rgba(255, 250, 246, 0.72);
+}
+
+.card-upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.card-upload-button strong {
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .upload-proof-bar {
