@@ -383,7 +383,10 @@ function renderTasks() {
         <span class="status-pill status-${status}">${status}</span>
       </div>
       <div class="task-main">
-        <h3>${escapeHtml(task.title)}</h3>
+        <div>
+          <h3>${escapeHtml(task.title)}</h3>
+          <span class="task-time-label">${formatTime(start)}</span>
+        </div>
         <p>${escapeHtml(task.prompt)}</p>
         <p class="task-meta">${windowText(task)}</p>
       </div>

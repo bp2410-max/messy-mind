@@ -414,6 +414,14 @@ h1 {
   font-weight: 500;
 }
 
+.task-time-label {
+  display: block;
+  margin-top: 4px;
+  color: var(--rose);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .task-main p {
   display: none;
 }
