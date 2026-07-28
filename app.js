@@ -1,7 +1,6 @@
 const STORE_KEY = "proof-window-state-v2";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GOOGLE_CLIENT_ID = "59689340247-5hps84egdnhoaoihm39s0e4546i4qlnt.apps.googleusercontent.com";
-const GOOGLE_API_KEY = "AIzaSyBdXsExhBFcBkcSq68S9RG20qZBHeaMpqw";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const GOOGLE_DISCOVERY_ORIGIN = "https://www.googleapis.com/calendar/v3";
 
@@ -600,7 +599,6 @@ async function syncCalendarEvents() {
 
 async function fetchCalendarEvents(start, end) {
   const params = new URLSearchParams({
-    key: GOOGLE_API_KEY,
     singleEvents: "true",
     orderBy: "startTime",
     timeMin: start.toISOString(),
