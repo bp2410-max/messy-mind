@@ -145,6 +145,8 @@ function formatDate(date) {
 }
 
 function seedWeek(force = false) {
+  if (state.calendarConnected) return;
+
   const start = weekStart();
   const weekKey = todayKey(start);
   if (!force && state.weekStartKey === weekKey && state.tasks.length) return;
@@ -400,13 +402,13 @@ function renderTasks() {
 
 function mergeCalendarTasks(calendarEvents) {
   const priorByCalendarId = new Map(state.tasks.map((task) => [task.calendarEventId, task]));
-  const calendarTasks = calendarEvents
+  const uniqueEvents = Array.from(new Map(calendarEvents.map((event) => [event.id, event])).values());
+  const calendarTasks = uniqueEvents
     .filter((event) => event.status !== "cancelled")
     .filter((event) => event.start?.dateTime || event.start?.date)
     .map((event) => createTaskFromCalendarEvent(event, priorByCalendarId.get(event.id)));
 
-  const manualTasks = state.tasks.filter((task) => task.source !== "google-calendar" && task.source !== "demo");
-  state.tasks = [...manualTasks, ...calendarTasks];
+  state.tasks = calendarTasks;
   state.calendarConnected = true;
   state.calendarLastSyncedAt = new Date().toISOString();
   saveState();
@@ -636,6 +638,8 @@ els.navItems.forEach((item) => {
   if (item.dataset.view) item.addEventListener("click", () => setView(item.dataset.view, item));
 });
 els.seedTodayButton.addEventListener("click", () => {
+  state.calendarConnected = false;
+  state.calendarLastSyncedAt = null;
   seedWeek(true);
   render();
 });
