@@ -1,5 +1,12 @@
 const STORE_KEY = "proof-window-state-v2";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const GOOGLE_CLIENT_ID = "495479754884-9co6kkctgqgklp41ai7tmub537oksfvk.apps.googleusercontent.com";
+const GOOGLE_API_KEY = "AIzaSyBdXsExhBFcBkcSq68S9RG20qZBHeaMpqw";
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_DISCOVERY_ORIGIN = "https://www.googleapis.com/calendar/v3";
+
+let googleTokenClient = null;
+let googleAccessToken = null;
 
 const demoEvents = [
   {
@@ -39,6 +46,8 @@ const defaultState = {
   history: [],
   selectedDateKey: null,
   weekStartKey: null,
+  calendarConnected: false,
+  calendarLastSyncedAt: null,
 };
 
 let state = loadState();
@@ -145,7 +154,7 @@ function seedWeek(force = false) {
   for (let day = 0; day < 7; day += 1) {
     const date = addDays(start, day);
     demoEvents.forEach((event, index) => {
-      state.tasks.push(createTask(event, index, date));
+      state.tasks.push(createTask({ ...event, source: "demo" }, index, date));
     });
   }
 
@@ -173,6 +182,31 @@ function createTask(event, index = Date.now(), date = selectedDate()) {
     proofUploadedAt: null,
     imageExpiresAt: null,
     skippedAt: null,
+    source: event.source || "manual",
+  };
+}
+
+function createTaskFromCalendarEvent(event, priorTask = null) {
+  const startValue = event.start?.dateTime || event.start?.date;
+  const start = event.start?.dateTime ? new Date(startValue) : dateAtTime("09:00", new Date(`${startValue}T00:00:00`));
+  const due = new Date(start.getTime() + state.settings.windowMinutes * 60 * 1000);
+  const dateKey = todayKey(start);
+
+  return {
+    id: priorTask?.id || crypto.randomUUID(),
+    calendarEventId: event.id,
+    title: event.summary || "Calendar event",
+    prompt: event.description || "Upload a photo that proves it happened.",
+    startAt: start.toISOString(),
+    dueAt: due.toISOString(),
+    dateKey,
+    completedAt: priorTask?.completedAt || null,
+    status: priorTask?.status || "upcoming",
+    proofImage: priorTask?.proofImage || null,
+    proofUploadedAt: priorTask?.proofUploadedAt || null,
+    imageExpiresAt: priorTask?.imageExpiresAt || null,
+    skippedAt: priorTask?.skippedAt || null,
+    source: "google-calendar",
   };
 }
 
@@ -222,12 +256,21 @@ function render() {
   els.windowMinutes.value = String(state.settings.windowMinutes);
   els.retentionHours.value = String(state.settings.retentionHours);
   els.onlyTaggedEvents.checked = state.settings.onlyTaggedEvents;
+  els.connectCalendarButton.textContent = state.calendarConnected ? "Sync Google Calendar" : "Connect Google Calendar";
+  if (els.calendarStatus) {
+    els.calendarStatus.textContent = state.calendarConnected ? calendarStatusText() : "Week trial";
+  }
 
   renderStats();
   renderDailyProgress();
   renderWeekStrip();
   renderTasks();
   renderHistory();
+}
+
+function calendarStatusText() {
+  if (!state.calendarLastSyncedAt) return "Calendar connected";
+  return `Synced ${formatTime(new Date(state.calendarLastSyncedAt))}`;
 }
 
 function renderStats() {
@@ -354,6 +397,20 @@ function renderTasks() {
 
     els.taskList.appendChild(card);
   }
+}
+
+function mergeCalendarTasks(calendarEvents) {
+  const priorByCalendarId = new Map(state.tasks.map((task) => [task.calendarEventId, task]));
+  const calendarTasks = calendarEvents
+    .filter((event) => event.status !== "cancelled")
+    .filter((event) => event.start?.dateTime || event.start?.date)
+    .map((event) => createTaskFromCalendarEvent(event, priorByCalendarId.get(event.id)));
+
+  const manualTasks = state.tasks.filter((task) => task.source !== "google-calendar" && task.source !== "demo");
+  state.tasks = [...manualTasks, ...calendarTasks];
+  state.calendarConnected = true;
+  state.calendarLastSyncedAt = new Date().toISOString();
+  saveState();
 }
 
 function cardPhotoClass(title) {
@@ -488,10 +545,93 @@ function addHistory(task, status, detail) {
   });
 }
 
-function syncCalendar() {
-  els.calendarStatus.textContent = "Synced just now";
-  seedWeek(true);
-  render();
+function initializeGoogleCalendar() {
+  if (!window.google?.accounts?.oauth2 || googleTokenClient) return Boolean(googleTokenClient);
+
+  googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GOOGLE_CALENDAR_SCOPE,
+    callback: async (response) => {
+      if (response.error) {
+        showCalendarError(response.error);
+        return;
+      }
+
+      googleAccessToken = response.access_token;
+      await syncCalendarEvents();
+    },
+  });
+
+  return true;
+}
+
+function requestGoogleCalendarAccess() {
+  if (!initializeGoogleCalendar()) {
+    showCalendarError("Google sign-in is still loading. Try again in a moment.");
+    return;
+  }
+
+  googleTokenClient.requestAccessToken({ prompt: googleAccessToken ? "" : "consent" });
+}
+
+async function syncCalendar() {
+  if (!googleAccessToken) {
+    requestGoogleCalendarAccess();
+    return;
+  }
+
+  await syncCalendarEvents();
+}
+
+async function syncCalendarEvents() {
+  try {
+    setCalendarBusy(true);
+    const start = dateFromKey(state.weekStartKey || todayKey(weekStart()));
+    const end = addDays(start, 7);
+    const events = await fetchCalendarEvents(start, end);
+    mergeCalendarTasks(events);
+    render();
+  } catch (error) {
+    showCalendarError(error.message || "Calendar sync failed.");
+  } finally {
+    setCalendarBusy(false);
+  }
+}
+
+async function fetchCalendarEvents(start, end) {
+  const params = new URLSearchParams({
+    key: GOOGLE_API_KEY,
+    singleEvents: "true",
+    orderBy: "startTime",
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
+    maxResults: "100",
+  });
+
+  const response = await fetch(`${GOOGLE_DISCOVERY_ORIGIN}/calendars/primary/events?${params}`, {
+    headers: {
+      Authorization: `Bearer ${googleAccessToken}`,
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Could not fetch Google Calendar.");
+  }
+
+  return data.items || [];
+}
+
+function setCalendarBusy(isBusy) {
+  els.connectCalendarButton.disabled = isBusy;
+  els.syncCalendarButton.disabled = isBusy;
+  els.connectCalendarButton.textContent = isBusy ? "Syncing..." : state.calendarConnected ? "Sync Google Calendar" : "Connect Google Calendar";
+}
+
+function showCalendarError(message) {
+  if (els.calendarStatus) els.calendarStatus.textContent = "Calendar error";
+  els.connectCalendarButton.textContent = "Try Google Calendar again";
+  alert(message);
 }
 
 els.navItems.forEach((item) => {
@@ -502,9 +642,7 @@ els.seedTodayButton.addEventListener("click", () => {
   render();
 });
 els.syncCalendarButton.addEventListener("click", syncCalendar);
-els.connectCalendarButton.addEventListener("click", () => {
-  els.calendarStatus.textContent = "Google OAuth next";
-});
+els.connectCalendarButton.addEventListener("click", requestGoogleCalendarAccess);
 function promptForProofUpload() {
   const task = tasksForSelectedDay().find((item) => !item.completedAt && !item.skippedAt) || tasksForSelectedDay()[0];
   if (!task) return;
@@ -578,3 +716,4 @@ els.clearHistoryButton.addEventListener("click", () => {
 seedWeek();
 render();
 setInterval(render, 60 * 1000);
+window.addEventListener("load", initializeGoogleCalendar);

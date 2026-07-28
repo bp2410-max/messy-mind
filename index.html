@@ -142,7 +142,7 @@
 
             <div class="settings-panel">
               <h2>Calendar connection</h2>
-              <p class="muted">This week trial uses local sample events. The next backend step is Google OAuth, Calendar API sync, object storage with lifecycle deletion, and push notifications.</p>
+              <p class="muted">Connect Google Calendar to turn your real events into daily proof windows. Access is read-only and refreshes when you open or sync the app.</p>
               <button class="primary-button wide" id="connectCalendarButton">Connect Google Calendar</button>
               <button class="secondary-button wide" id="seedTodayButton">Reset week</button>
             </div>
@@ -177,6 +177,7 @@
     </dialog>
     </div>
 
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="app.js"></script>
   </body>
 </html>
