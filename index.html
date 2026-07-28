@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6efe7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Messy Mind" />
+    <title>Messy Mind</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="mobile-frame" aria-label="Mobile app preview">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">MM</span>
+          <div>
+            <strong>Messy Mind</strong>
+            <span>Make it count</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Main navigation">
+          <button class="nav-item active" data-view="today" title="Home">
+            <span aria-hidden="true">⌂</span>
+            <span>Home</span>
+          </button>
+          <button class="nav-item" data-view="today" title="Habits">
+            <span aria-hidden="true">♧</span>
+            <span>Habits</span>
+          </button>
+          <button class="nav-item nav-plus" data-upload-proof title="Upload proof" aria-label="Upload proof">
+            <span aria-hidden="true">＋</span>
+          </button>
+          <button class="nav-item" data-view="history" title="History">
+            <span aria-hidden="true">▧</span>
+            <span>Proofs</span>
+          </button>
+          <button class="nav-item" data-view="settings" title="Settings">
+            <span aria-hidden="true">♙</span>
+            <span>You</span>
+          </button>
+        </nav>
+
+        <div class="calendar-card">
+          <div>
+            <span class="mini-label">Calendar</span>
+            <strong id="calendarStatus">Week trial</strong>
+          </div>
+          <button class="icon-button" title="Sync calendar" aria-label="Sync calendar">↻</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <section class="app-header">
+          <div class="brand-lockup">
+            <span class="lotus-mark" aria-hidden="true"></span>
+            <strong>Messy Mind</strong>
+          </div>
+          <button class="avatar-button" id="syncCalendarButton" title="Sync calendar" aria-label="Sync calendar"></button>
+        </section>
+
+        <section class="hero-copy">
+          <p class="eyebrow" id="currentDateLabel"></p>
+          <h1>A softer week, kept</h1>
+          <span class="heart-mark" aria-hidden="true">♡</span>
+        </section>
+
+        <section class="week-strip" id="weekStrip" aria-label="Week trial days"></section>
+
+        <section class="day-progress-card" aria-label="Daily milestone progress">
+          <div class="progress-ring" aria-hidden="true">
+            <span id="dailyProgressPercent">0%</span>
+            <small>daily progress</small>
+          </div>
+          <div class="progress-metrics">
+            <div class="metric-row">
+              <span class="metric-icon sprout" aria-hidden="true">♧</span>
+              <div>
+                <strong id="completedCount">0</strong>
+                <span>habits on track</span>
+              </div>
+            </div>
+            <hr />
+            <div class="metric-row">
+              <span class="metric-icon heart" aria-hidden="true">♡</span>
+              <div>
+                <strong id="openCount">0</strong>
+                <span>open right now</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <p class="script-note">Small steps. Big bloom.</p>
+
+        <section class="view active" id="todayView">
+          <h2 class="sr-only" id="taskListTitle">Calendar tasks</h2>
+          <div class="task-list" id="taskList"></div>
+          <button class="upload-proof-bar" id="addEventButton" data-upload-proof>
+            <span class="camera-bubble" aria-hidden="true">▣</span>
+            <strong>Upload proof</strong>
+            <span aria-hidden="true">→</span>
+          </button>
+        </section>
+
+        <section class="view" id="historyView">
+          <div class="timeline-header">
+            <h2>Completion history</h2>
+            <button class="secondary-button" id="clearHistoryButton">Clear history</button>
+          </div>
+          <div class="history-list" id="historyList"></div>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="settings-grid">
+            <div class="settings-panel">
+              <h2>Proof rules</h2>
+              <label class="field">
+                <span>Proof window</span>
+                <select id="windowMinutes">
+                  <option value="10">10 minutes</option>
+                  <option value="15">15 minutes</option>
+                  <option value="20">20 minutes</option>
+                  <option value="30">30 minutes</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Photo retention</span>
+                <select id="retentionHours">
+                  <option value="12">12 hours</option>
+                  <option value="24">24 hours</option>
+                  <option value="48">48 hours</option>
+                </select>
+              </label>
+              <label class="toggle-row">
+                <input type="checkbox" id="onlyTaggedEvents" checked />
+                <span>Only track calendar events tagged #proof</span>
+              </label>
+            </div>
+
+            <div class="settings-panel">
+              <h2>Calendar connection</h2>
+              <p class="muted">This week trial uses local sample events. The next backend step is Google OAuth, Calendar API sync, object storage with lifecycle deletion, and push notifications.</p>
+              <button class="primary-button wide" id="connectCalendarButton">Connect Google Calendar</button>
+              <button class="secondary-button wide" id="seedTodayButton">Reset week</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="eventDialog">
+      <form method="dialog" class="dialog-form" id="eventForm">
+        <div class="dialog-header">
+          <h2>Add calendar event</h2>
+          <button class="icon-button" value="cancel" title="Close" aria-label="Close">×</button>
+        </div>
+        <label class="field">
+          <span>Task</span>
+          <input id="eventTitle" required placeholder="Gym, walk, lunch, wake up" />
+        </label>
+        <label class="field">
+          <span>Start time</span>
+          <input id="eventTime" type="time" required />
+        </label>
+        <label class="field">
+          <span>Proof prompt</span>
+          <input id="eventPrompt" placeholder="Upload a photo that proves it happened" />
+        </label>
+        <menu class="dialog-actions">
+          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="primary-button" id="saveEventButton" value="default">Save event</button>
+        </menu>
+      </form>
+    </dialog>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
