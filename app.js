@@ -1,4 +1,7 @@
 const STORE_KEY = "proof-window-state-v2";
+const PHOTO_DB_NAME = "messy-mind-photos";
+const PHOTO_STORE_NAME = "proofPhotos";
+const PHOTO_FALLBACK_PREFIX = "messy-mind-photo:";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GOOGLE_CLIENT_ID = "59689340247-5hps84egdnhoaoihm39s0e4546i4qlnt.apps.googleusercontent.com";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
@@ -6,6 +9,8 @@ const GOOGLE_DISCOVERY_ORIGIN = "https://www.googleapis.com/calendar/v3";
 
 let googleTokenClient = null;
 let googleAccessToken = null;
+let photoDbPromise = null;
+const hydratedPhotoIds = new Set();
 
 const demoEvents = [
   {
@@ -93,7 +98,19 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  const stateForStorage = {
+    ...state,
+    tasks: state.tasks.map((task) => ({
+      ...task,
+      proofImage: null,
+    })),
+  };
+
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(stateForStorage));
+  } catch (error) {
+    console.warn("Could not save app state.", error);
+  }
 }
 
 function todayKey(date = new Date()) {
@@ -142,6 +159,64 @@ function formatDate(date) {
     month: "long",
     day: "numeric",
   }).format(date);
+}
+
+function openPhotoDb() {
+  if (!window.indexedDB) return Promise.resolve(null);
+  if (photoDbPromise) return photoDbPromise;
+
+  photoDbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(PHOTO_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(PHOTO_STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+  return photoDbPromise;
+}
+
+async function storeProofImage(taskId, imageDataUrl) {
+  const db = await openPhotoDb();
+  if (!db) {
+    localStorage.setItem(`${PHOTO_FALLBACK_PREFIX}${taskId}`, imageDataUrl);
+    return;
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(PHOTO_STORE_NAME, "readwrite");
+    transaction.objectStore(PHOTO_STORE_NAME).put(imageDataUrl, taskId);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+async function getProofImage(taskId) {
+  const db = await openPhotoDb();
+  if (!db) return localStorage.getItem(`${PHOTO_FALLBACK_PREFIX}${taskId}`);
+
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(PHOTO_STORE_NAME, "readonly").objectStore(PHOTO_STORE_NAME).get(taskId);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function deleteProofImage(taskId) {
+  const db = await openPhotoDb();
+  if (!db) {
+    localStorage.removeItem(`${PHOTO_FALLBACK_PREFIX}${taskId}`);
+    return;
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(PHOTO_STORE_NAME, "readwrite");
+    transaction.objectStore(PHOTO_STORE_NAME).delete(taskId);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
 }
 
 function seedWeek(force = false) {
@@ -234,13 +309,19 @@ function refreshStatuses() {
 function expireOldImages() {
   const now = Date.now();
   let changed = false;
+  const expiredIds = [];
 
   state.tasks = state.tasks.map((task) => {
     if (task.imageExpiresAt && new Date(task.imageExpiresAt).getTime() <= now && task.proofImage) {
       changed = true;
+      expiredIds.push(task.id);
       return { ...task, proofImage: null };
     }
     return task;
+  });
+
+  expiredIds.forEach((taskId) => {
+    deleteProofImage(taskId).catch((error) => console.warn("Could not delete expired proof photo.", error));
   });
 
   if (changed) saveState();
@@ -267,6 +348,7 @@ function render() {
   renderWeekStrip();
   renderTasks();
   renderHistory();
+  hydrateProofImagesForSelectedDay();
 }
 
 function calendarStatusText() {
@@ -408,6 +490,27 @@ function renderTasks() {
   }
 }
 
+async function hydrateProofImagesForSelectedDay() {
+  const tasks = tasksForSelectedDay().filter((task) => task.completedAt && !task.proofImage && !hydratedPhotoIds.has(task.id));
+  if (!tasks.length) return;
+
+  let changed = false;
+  for (const task of tasks) {
+    hydratedPhotoIds.add(task.id);
+    try {
+      const image = await getProofImage(task.id);
+      if (image) {
+        task.proofImage = image;
+        changed = true;
+      }
+    } catch (error) {
+      console.warn("Could not load proof photo.", error);
+    }
+  }
+
+  if (changed) renderTasks();
+}
+
 function mergeCalendarTasks(calendarEvents) {
   const priorByCalendarId = new Map(state.tasks.map((task) => [task.calendarEventId, task]));
   const uniqueEvents = Array.from(new Map(calendarEvents.map((event) => [event.id, event])).values());
@@ -489,7 +592,7 @@ async function uploadProof(taskId, file) {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!task) return;
 
-  const image = await fileToDataUrl(file);
+  const image = await compressImage(file);
   const now = new Date();
   const expires = new Date(now.getTime() + state.settings.retentionHours * 60 * 60 * 1000);
   const completedStatus = now <= new Date(task.dueAt) ? "completed" : "late";
@@ -505,13 +608,33 @@ async function uploadProof(taskId, file) {
 
   addHistory(task, completedStatus, `Photo uploaded at ${formatTime(now)} for ${formatTime(new Date(task.startAt))}`);
   saveState();
+  try {
+    await storeProofImage(task.id, image);
+  } catch (error) {
+    console.warn("Check-in saved, but photo could not be stored.", error);
+  }
   render();
 }
 
-function fileToDataUrl(file) {
+function compressImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const maxSize = 900;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      };
+      image.onerror = reject;
+      image.src = reader.result;
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -522,6 +645,7 @@ function skipOrUndo(taskId) {
   if (!task) return;
 
   if (task.completedAt || task.skippedAt) {
+    const photoId = task.id;
     Object.assign(task, {
       completedAt: null,
       proofImage: null,
@@ -530,6 +654,8 @@ function skipOrUndo(taskId) {
       skippedAt: null,
       status: statusForTask({ ...task, completedAt: null }),
     });
+    hydratedPhotoIds.delete(photoId);
+    deleteProofImage(photoId).catch((error) => console.warn("Could not delete proof photo.", error));
   } else {
     task.skippedAt = new Date().toISOString();
     task.status = "skipped";
